@@ -1,7 +1,9 @@
-"""List and delete R2 objects, with SigV4 signed by hand.
+"""List, download and delete R2 objects, with SigV4 signed by hand.
 
     python3 r2.py buckets
     python3 r2.py ls BUCKET [--prefix P]
+    python3 r2.py get BUCKET --prefix P --out DIR
+    python3 r2.py get BUCKET --key K --out PATH
     python3 r2.py rm BUCKET --prefix P --yes
 
 LIST needs a canonical query string, so the signer here takes query parameters.
@@ -9,6 +11,11 @@ An upload signs an empty one. The rest of the signature is the same.
 
 A delete needs --yes, because a prefix that matches more than intended is the
 one mistake that this tool cannot undo.
+
+A get writes the key under --out, and a prefix keeps its own folder structure.
+It streams each object to disk, because an object can be a checkpoint of several
+gigabytes. It skips a file that is already there at the same size, so a second
+run fetches only the files that are still absent.
 """
 import argparse, datetime, hashlib, hmac, os, pathlib, sys
 import urllib.error, urllib.parse, urllib.request
@@ -98,11 +105,64 @@ def objects(bucket, prefix=""):
             return out
 
 
+def download(bucket, key, out):
+    """Stream one object to a path, and return the number of bytes written.
+
+    CONTRACT: stream it. call() reads a whole response into memory, which suits a
+    listing, and an object can be a checkpoint of several gigabytes.
+    """
+    empty = hashlib.sha256(b"").hexdigest()
+    url, headers = sign("GET", f"/{bucket}/{urllib.parse.quote(key, safe='/')}", empty)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    part = out.with_suffix(out.suffix + ".part")
+    try:
+        with urllib.request.urlopen(
+                urllib.request.Request(url, method="GET", headers=headers),
+                timeout=300) as r, open(part, "wb") as f:
+            written = 0
+            for chunk in iter(lambda: r.read(1 << 22), b""):
+                f.write(chunk)
+                written += len(chunk)
+    except urllib.error.HTTPError as e:
+        part.unlink(missing_ok=True)
+        sys.exit(f"GET {key} failed: {e.code} {e.read().decode(errors='replace')[:300]}")
+    # CAUTION: rename only when the body is complete. An interrupted get then leaves
+    # a .part file, and the size check accepts only a complete file.
+    part.replace(out)
+    return written
+
+
+def get(bucket, prefix, key, out):
+    """Fetch one key, or every key under a prefix, under out."""
+    if key:
+        target = out / key.rsplit("/", 1)[-1] if out.is_dir() else out
+        if target.exists() and target.stat().st_size:
+            print(f"  {target} already {target.stat().st_size:,} bytes, skipped")
+            return
+        n = download(bucket, key, target)
+        print(f"  {key} -> {target}  {n:,} bytes")
+        return
+    found = objects(bucket, prefix)
+    if not found:
+        sys.exit(f"nothing under {prefix!r} in {bucket}")
+    done = skipped = total = 0
+    for k, size in found:
+        target = out / k
+        if target.exists() and target.stat().st_size == size:
+            skipped += 1
+            continue
+        total += download(bucket, k, target)
+        done += 1
+    print(f"  {done} fetched, {skipped} already there, {total/1e6:.1f} MB into {out}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=["buckets", "ls", "rm"])
+    p.add_argument("action", choices=["buckets", "ls", "get", "rm"])
     p.add_argument("bucket", nargs="?")
     p.add_argument("--prefix", default="")
+    p.add_argument("--key", default="", help="one object, in place of a prefix")
+    p.add_argument("--out", type=pathlib.Path, help="where a get writes")
     p.add_argument("--yes", action="store_true")
     p.add_argument("--env", default=DEFAULT_ENV)
     a = p.parse_args()
@@ -115,6 +175,10 @@ def main():
         return buckets()
     if not a.bucket:
         sys.exit("that action needs a bucket")
+    if a.action == "get":
+        if not a.out:
+            sys.exit("a get needs --out, a directory for a prefix or a path for a key")
+        return get(a.bucket, a.prefix, a.key, a.out)
     found = objects(a.bucket, a.prefix)
     total = sum(s for _, s in found)
     if a.action == "ls":
