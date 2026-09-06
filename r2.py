@@ -29,7 +29,16 @@ DEFAULT_ENV = ".env"
 
 
 def load_env(path):
-    """Read the .env, and keep every value out of the output."""
+    """Read the .env, and keep every value out of the output.
+
+    CONTRACT: an absent file is acceptable when the environment already holds the
+    credentials. A machine can set them in its environment without a .env file,
+    and an error here would stop the tool on that machine. The caller checks the
+    three variables afterwards, so an environment without them still fails, and
+    the message names the absent variable.
+    """
+    if not pathlib.Path(path).exists():
+        return
     for line in pathlib.Path(path).read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
