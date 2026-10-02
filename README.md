@@ -1,7 +1,7 @@
 ---
 type: Repository Guide
 title: Cloudflare R2
-description: Dependency-free Python tools to list, upload and delete Cloudflare R2 objects.
+description: Dependency-free Python tools to list, upload, download and delete Cloudflare R2 objects.
 status: stable
 tags: [data, r2, storage]
 generated:
@@ -12,7 +12,7 @@ supervised:
   at: 2026-09-29T18:00:00Z
 edited:
   by: claude-code/opus-5.5
-  at: 2026-10-02T17:49:58Z
+  at: 2026-10-02T18:04:52Z
 ---
 
 # Cloudflare R2
