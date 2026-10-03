@@ -69,7 +69,7 @@ Both tools read these variables from the file that `--env FILE` names, which is 
 
 ## 5. Uploads
 
-| Behaviour | Reason |
+| Behavior | Reason |
 |---|---|
 | `push.py` lists the bucket first, and skips a key whose size already matches | A large transfer on a slow uplink needs several attempts, and a restart must send only what is still absent |
 | A failed PUT is tried again up to 6 times, and each pause is 5 seconds longer than the last | A short network fault must not stop a long upload |
@@ -91,7 +91,7 @@ Both tools read these variables from the file that `--env FILE` names, which is 
 
 ## 7. Downloads
 
-| Behaviour | Reason |
+| Behavior | Reason |
 |---|---|
 | `get` writes each key under `--out` | A prefix keeps its own shape on disk |
 | Each object streams to a `.part` file, and the file takes its name when it is complete | An interrupted download leaves a `.part` file, and only a complete file takes the final name |
