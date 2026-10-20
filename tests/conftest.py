@@ -14,14 +14,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import push  # noqa: E402
-import r2  # noqa: E402
+import s3  # noqa: E402
 from fake_service import Transport  # noqa: E402
 
 # The example credentials that AWS publishes for documentation. They sign nothing real.
 ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
 SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 B2_ENDPOINT = "https://s3.eu-central-003.backblazeb2.com"
-R2_ENDPOINT = "https://0123456789abcdef.r2.cloudflarestorage.com"
+CLOUDFLARE_ENDPOINT = "https://0123456789abcdef.r2.cloudflarestorage.com"
 
 
 @pytest.fixture(autouse=True)
@@ -42,10 +42,10 @@ def transport(isolated):
 @pytest.fixture
 def credentials(monkeypatch):
     """Give the tools a B2 endpoint, with no region set."""
-    monkeypatch.setenv("R2_ENDPOINT", B2_ENDPOINT)
-    monkeypatch.setenv("R2_ACCESS_KEY_ID", ACCESS_KEY)
-    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", SECRET_KEY)
-    monkeypatch.delenv("R2_REGION", raising=False)
+    monkeypatch.setenv("S3_ENDPOINT", B2_ENDPOINT)
+    monkeypatch.setenv("S3_ACCESS_KEY_ID", ACCESS_KEY)
+    monkeypatch.setenv("S3_SECRET_ACCESS_KEY", SECRET_KEY)
+    monkeypatch.delenv("S3_REGION", raising=False)
 
 
 class _FrozenDatetime(datetime.datetime):
@@ -58,4 +58,4 @@ class _FrozenDatetime(datetime.datetime):
 def frozen_clock(monkeypatch):
     """Sign every request at 2026-10-20T12:00:00Z."""
     fake = types.SimpleNamespace(datetime=_FrozenDatetime, timezone=datetime.timezone)
-    monkeypatch.setattr(r2, "datetime", fake)
+    monkeypatch.setattr(s3, "datetime", fake)
