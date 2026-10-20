@@ -9,6 +9,10 @@
 LIST needs a canonical query string, so the signer here takes query parameters.
 An upload signs an empty one. The rest of the signature is the same.
 
+The signature names the region in R2_REGION, or auto when that variable is absent.
+R2 accepts auto, and Backblaze B2 needs the region of its endpoint. With one .env for
+each service, the same tools reach either service.
+
 A delete needs --yes, because a prefix that matches more than intended is the
 one mistake that this tool cannot undo.
 
@@ -47,23 +51,32 @@ def load_env(path):
         os.environ.setdefault(k.strip(), v.strip())
 
 
-def sign(method, path, payload_hash, query=None, length=None):
+def sign(method, path, payload_hash, query=None, length=None, extra_headers=None):
+    """Return the URL and the headers of a request with a SigV4 signature.
+
+    The signature covers extra_headers with the rest, so a proxy cannot drop or change one
+    unseen. The stored hash of an upload travels this way, as x-amz-meta-sha256.
+    """
     ep = os.environ["R2_ENDPOINT"].rstrip("/")
     ak, sk = os.environ["R2_ACCESS_KEY_ID"], os.environ["R2_SECRET_ACCESS_KEY"]
+    # NOTE: R2 accepts the region auto for every request. B2 and AWS reject a signature unless
+    # it names the region of the endpoint, as eu-central-003 in s3.eu-central-003.backblazeb2.com.
+    region = os.environ.get("R2_REGION") or "auto"
     host = ep.split("//", 1)[1]
     now = datetime.datetime.now(datetime.timezone.utc)
     amz, ds = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
     headers = {"host": host, "x-amz-content-sha256": payload_hash, "x-amz-date": amz}
+    headers.update({k.lower(): v for k, v in (extra_headers or {}).items()})
     names = ";".join(sorted(headers))
     canon_headers = "".join(f"{k}:{headers[k]}\n" for k in sorted(headers))
     # The canonical query string is sorted by key and each part is encoded.
     q = "&".join(f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(str(v), safe='')}"
                  for k, v in sorted((query or {}).items()))
     canon = f"{method}\n{path}\n{q}\n{canon_headers}\n{names}\n{payload_hash}"
-    scope = f"{ds}/auto/s3/aws4_request"
+    scope = f"{ds}/{region}/s3/aws4_request"
     sts = f"AWS4-HMAC-SHA256\n{amz}\n{scope}\n{hashlib.sha256(canon.encode()).hexdigest()}"
     step = lambda k, m: hmac.new(k, m.encode(), hashlib.sha256).digest()
-    key = step(step(step(step(("AWS4" + sk).encode(), ds), "auto"), "s3"), "aws4_request")
+    key = step(step(step(step(("AWS4" + sk).encode(), ds), region), "s3"), "aws4_request")
     sig = hmac.new(key, sts.encode(), hashlib.sha256).hexdigest()
     out = dict(headers)
     out["Authorization"] = (f"AWS4-HMAC-SHA256 Credential={ak}/{scope}, "
@@ -112,6 +125,24 @@ def objects(bucket, prefix=""):
             token = root.findtext(NS + "NextContinuationToken")
         else:
             return out
+
+
+def head(bucket, key):
+    """Return the response headers of one object, or None when the bucket lacks the key.
+
+    The user metadata of an object, such as x-amz-meta-sha256, arrives only here. A listing
+    does not carry it.
+    """
+    empty = hashlib.sha256(b"").hexdigest()
+    url, headers = sign("HEAD", f"/{bucket}/{urllib.parse.quote(key, safe='/')}", empty)
+    try:
+        with urllib.request.urlopen(
+                urllib.request.Request(url, method="HEAD", headers=headers), timeout=300) as r:
+            return r.headers
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
 
 
 def download(bucket, key, out):
