@@ -10,10 +10,18 @@ atomic, so a broken one leaves the bucket as it was before the PUT.
 """
 import argparse, hashlib, json, os, pathlib, sys, time
 import urllib.error, urllib.parse, urllib.request
+import xml.etree.ElementTree as ET
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from r2 import DEFAULT_ENV, load_env, sign, objects  # noqa: E402
 
 TRIES = 6
+
+# CONTRACT: the S3 code in the error body decides the case. R2 and B2 both answer 409, with
+# different meanings. B2 bucket names are global, so B2 answers BucketAlreadyOwnedByYou for a
+# bucket of this account and BucketAlreadyExists for a name of another account. R2 names are
+# unique within one account, and R2 answers BucketConflict, which can therefore mean only this
+# account.
+OWN_BUCKET = {"BucketAlreadyOwnedByYou", "BucketConflict"}
 
 
 def put(bucket, key, path):
@@ -45,10 +53,23 @@ def put(bucket, key, path):
             headers["content-type"] = "application/octet-stream"
 
 
-def make_bucket(bucket):
-    """Create the bucket with a PUT on its name.
+def xml_text(body, name):
+    """Return the text of the first element called name, in any namespace, or None."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] == name:
+            return element.text
+    return None
 
-    A bucket that this account already owns is accepted.
+
+def make_bucket(bucket):
+    """Create the bucket with a PUT on its name, or use it when this account owns it already.
+
+    Raise RuntimeError when another account holds the name, or when the service refuses the
+    PUT with any code that OWN_BUCKET does not hold.
     """
     empty = hashlib.sha256(b"").hexdigest()
     url, headers = sign("PUT", "/" + bucket, empty, length=0)
@@ -58,10 +79,14 @@ def make_bucket(bucket):
             timeout=120)
         print(f"  bucket {bucket} created", flush=True)
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        if 409 == e.code or "BucketAlreadyOwnedByYou" in body:
+        code = xml_text(e.read(), "Code")
+        if code in OWN_BUCKET:
             return
-        raise
+        if code == "BucketAlreadyExists":
+            raise RuntimeError(f"another account holds the bucket name {bucket}. B2 bucket "
+                               f"names are global, so this bucket needs another name") from None
+        raise RuntimeError(f"the creation of bucket {bucket} failed: HTTP {e.code}, "
+                           f"{code or 'with no S3 code'}") from None
 
 
 def send(bucket, prefix, files):
