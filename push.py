@@ -1,4 +1,4 @@
-"""Upload to R2 or B2, skip what is already there and retry what breaks.
+"""Upload to an S3-compatible store, skip what is already there and retry what breaks.
 
 On a slow or saturated uplink, a large PUT breaks often enough that a long
 transfer needs several tries, and a restart must send only what is still
@@ -26,7 +26,7 @@ import urllib.error, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from r2 import DEFAULT_ENV, head, load_env, sign, objects  # noqa: E402
+from s3 import DEFAULT_ENV, head, load_env, sign, objects  # noqa: E402
 
 TRIES = 6
 HASH_HEADER = "x-amz-meta-sha256"
@@ -374,7 +374,7 @@ def main(argv=None):
     if not a.dataset and (a.inner is not None or a.flat):
         parser.error("--inner and --flat apply only with --dataset")
     load_env(a.env)
-    for want in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+    for want in ("S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"):
         if not os.environ.get(want):
             sys.exit(f"{want} is not set, so the .env did not load")
     try:

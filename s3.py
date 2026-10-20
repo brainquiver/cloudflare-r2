@@ -1,15 +1,15 @@
-"""List, download and delete R2 objects, with SigV4 signed by hand.
+"""List, download and delete objects in an S3-compatible store, with SigV4 signed by hand.
 
-    python3 r2.py buckets
-    python3 r2.py ls BUCKET [--prefix P]
-    python3 r2.py get BUCKET --prefix P --out DIR
-    python3 r2.py get BUCKET --key K --out PATH
-    python3 r2.py rm BUCKET --prefix P --yes
+    python3 s3.py buckets
+    python3 s3.py ls BUCKET [--prefix P]
+    python3 s3.py get BUCKET --prefix P --out DIR
+    python3 s3.py get BUCKET --key K --out PATH
+    python3 s3.py rm BUCKET --prefix P --yes
 
 LIST needs a canonical query string, so the signer here takes query parameters.
 An upload signs an empty one. The rest of the signature is the same.
 
-The signature names the region in R2_REGION, or auto when that variable is absent.
+The signature names the region in S3_REGION, or auto when that variable is absent.
 R2 accepts auto, and Backblaze B2 needs the region of its endpoint. With one .env for
 each service, the same tools reach either service.
 
@@ -57,11 +57,11 @@ def sign(method, path, payload_hash, query=None, length=None, extra_headers=None
     The signature covers extra_headers with the rest, so a proxy cannot drop or change one
     unseen. The stored hash of an upload travels this way, as x-amz-meta-sha256.
     """
-    ep = os.environ["R2_ENDPOINT"].rstrip("/")
-    ak, sk = os.environ["R2_ACCESS_KEY_ID"], os.environ["R2_SECRET_ACCESS_KEY"]
+    ep = os.environ["S3_ENDPOINT"].rstrip("/")
+    ak, sk = os.environ["S3_ACCESS_KEY_ID"], os.environ["S3_SECRET_ACCESS_KEY"]
     # NOTE: R2 accepts the region auto for every request. B2 and AWS reject a signature unless
     # it names the region of the endpoint, as eu-central-003 in s3.eu-central-003.backblazeb2.com.
-    region = os.environ.get("R2_REGION") or "auto"
+    region = os.environ.get("S3_REGION") or "auto"
     host = ep.split("//", 1)[1]
     now = datetime.datetime.now(datetime.timezone.utc)
     amz, ds = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
@@ -207,7 +207,7 @@ def main():
     p.add_argument("--env", default=DEFAULT_ENV)
     a = p.parse_args()
     load_env(a.env)
-    for want in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+    for want in ("S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"):
         if not os.environ.get(want):
             sys.exit(f"{want} is not set, so the .env did not load")
 

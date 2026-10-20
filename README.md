@@ -1,9 +1,9 @@
 ---
 type: Repository Guide
-title: Cloudflare R2 and Backblaze B2
-description: Dependency-free Python tools to list, upload, download and delete objects in Cloudflare R2 and Backblaze B2.
+title: S3 Tools
+description: Dependency-free Python tools to list, upload, download and delete objects in S3-compatible stores, such as Cloudflare R2 and Backblaze B2.
 status: stable
-tags: [data, r2, b2, storage]
+tags: [data, s3, r2, b2, storage]
 generated:
   by: claude-code/opus-5.5
   at: 2026-09-29T18:00:00Z
@@ -12,18 +12,18 @@ supervised:
   at: 2026-09-29T18:00:00Z
 edited:
   by: claude-code/opus-5.5
-  at: 2026-10-20T14:17:06Z
+  at: 2026-10-20T19:55:58Z
 ---
 
-# Cloudflare R2 and Backblaze B2
+# S3 Tools
 
-Two Python tools use Cloudflare R2 and Backblaze B2 through their S3 APIs, and they make their SigV4 signatures by hand. They need only the standard library, so they run on any machine with Python 3.10 or later.
+Two Python tools use S3-compatible object stores, such as Cloudflare R2 and Backblaze B2, and they make their SigV4 signatures by hand. They need only the standard library, so they run on any machine with Python 3.10 or later.
 
 An upload streams its body from disk, and the signature uses the digest from a first pass. A 500 MB shard therefore stays on disk for the whole upload, and a file over 5 GB goes to the bucket in parts.
 
 | What | Where |
 |---|---|
-| List buckets and objects, download, delete | `r2.py` |
+| List buckets and objects, download, delete | `s3.py` |
 | Upload files, shard sets and datasets | `push.py` |
 | Unit suite behind a fake S3 service | `tests/` |
 
@@ -31,11 +31,11 @@ An upload streams its body from disk, and the signature uses the digest from a f
 
 ## 1. Build and Run
 
-    python3 r2.py buckets
-    python3 r2.py ls BUCKET [--prefix P]
-    python3 r2.py get BUCKET --prefix P --out DIR
-    python3 r2.py get BUCKET --key K --out PATH
-    python3 r2.py rm BUCKET --prefix P --yes
+    python3 s3.py buckets
+    python3 s3.py ls BUCKET [--prefix P]
+    python3 s3.py get BUCKET --prefix P --out DIR
+    python3 s3.py get BUCKET --key K --out PATH
+    python3 s3.py rm BUCKET --prefix P --yes
     python3 push.py BUCKET FILE... [--prefix P]
     python3 push.py BUCKET --shard-set DIR [--prefix P]
     python3 push.py BUCKET --dataset DIR [--dataset DIR...] --inner NAME [--prefix P]
@@ -48,10 +48,10 @@ The tools run from the source, without a build or a package install, and the uni
 
 | Variable | Value |
 |---|---|
-| `R2_ENDPOINT` | the account endpoint |
-| `R2_ACCESS_KEY_ID` | the access key |
-| `R2_SECRET_ACCESS_KEY` | the secret key |
-| `R2_REGION` | the region of the endpoint, and `auto` when it is absent |
+| `S3_ENDPOINT` | the account endpoint |
+| `S3_ACCESS_KEY_ID` | the access key |
+| `S3_SECRET_ACCESS_KEY` | the secret key |
+| `S3_REGION` | the region of the endpoint, and `auto` when it is absent |
 
 Both tools read these variables from the file that `--env FILE` names, which is `.env` in the working directory by default. If the file is absent, they read the variables from the environment. A variable that is still absent stops the tool, and the message names it.
 
@@ -59,7 +59,7 @@ R2 accepts the region `auto`, but B2 rejects a signature unless it names the reg
 
 ## 2. Directory Tree
 
-    r2.py      signatures, lists, heads, downloads and deletes
+    s3.py      signatures, lists, heads, downloads and deletes
     push.py    uploads, retries, multipart uploads, shard sets and datasets
     tests/     the unit suite, with one file for each concern
 
