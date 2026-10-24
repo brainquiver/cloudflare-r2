@@ -59,6 +59,18 @@ def test_a_dataset_without_its_card_is_refused(dataset):
         push.dataset_files(dataset, inner="curated")
 
 
+def test_whole_sends_every_folder_at_its_own_path(dataset):
+    assert keys(push.dataset_files(dataset, inner=None, whole=True)) == [
+        f"geo/curated/cfg_a/{SHARD}", f"geo/curated/cfg_b/{SHARD}", "geo/geo_card.md",
+        "geo/samples/raw.jsonl"]
+
+
+def test_whole_still_needs_the_card(dataset):
+    (dataset / "geo_card.md").unlink()
+    with pytest.raises(RuntimeError, match="geo_card.md"):
+        push.dataset_files(dataset, inner=None, whole=True)
+
+
 def test_two_datasets_with_one_name_are_refused(tmp_path, dataset):
     other = tmp_path / "elsewhere" / "geo"
     (other / "curated").mkdir(parents=True)
@@ -77,7 +89,7 @@ def test_the_cli_needs_an_explicit_layout(credentials, dataset, monkeypatch, cap
     with pytest.raises(SystemExit) as stop:
         run(monkeypatch, "datasets", "--dataset", str(dataset))
     assert stop.value.code != 0
-    assert "--inner NAME or --flat" in capsys.readouterr().err
+    assert "--inner NAME, --flat or --whole" in capsys.readouterr().err
 
 
 def test_the_cli_sends_the_card_and_shards_under_the_dataset_folder(

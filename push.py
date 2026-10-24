@@ -307,15 +307,18 @@ def send_shard_set(bucket, prefix, directory):
     send(bucket, [(keyed(prefix, manifest_path.name), manifest_path)])
 
 
-def dataset_files(directory, inner):
+def dataset_files(directory, inner, whole=False):
     """Return the (key, path) pairs of one dataset: its card, then each file under curated/.
 
     Every key starts with the name of the dataset directory. inner names the folder in the
     bucket that holds the curated tree, and None puts that tree straight under the dataset.
     The config directories inside curated/ stay in both cases. Two configs can hold shards with
-    the same file name.
+    the same file name. whole sends every file of the directory at its own path, for an archive
+    that keeps the samples, the scripts and the stats beside the curated tree.
     """
     directory = pathlib.Path(directory)
+    if whole:
+        return tree_files(directory)
     if inner is not None and (not inner or "/" in inner or inner in (".", "..")):
         raise RuntimeError(f"--inner {inner!r} must be one folder name")
     slug = directory.name
@@ -336,7 +339,21 @@ def dataset_files(directory, inner):
     return pairs
 
 
-def collect_datasets(directories, inner):
+def tree_files(directory):
+    """Return the (key, path) pairs of every file in a dataset directory, at its own path."""
+    slug = directory.name
+    if not (directory / f"{slug}_card.md").is_file():
+        raise RuntimeError(f"{directory / f'{slug}_card.md'} is not there, "
+                           "and the tool sends a dataset only with its card")
+    pairs = []
+    for path in sorted(directory.rglob("*")):
+        rel = path.relative_to(directory)
+        if path.is_file() and not path.is_symlink() and not any(is_junk(part) for part in rel.parts):
+            pairs.append((f"{slug}/{rel.as_posix()}", path))
+    return pairs
+
+
+def collect_datasets(directories, inner, whole=False):
     """Return the pairs of several datasets, and refuse two datasets with one directory name."""
     seen: dict[str, pathlib.Path] = {}
     pairs: list[tuple[str, pathlib.Path]] = []
@@ -345,7 +362,7 @@ def collect_datasets(directories, inner):
             raise RuntimeError(f"{seen[directory.name]} and {directory} are both called "
                                f"{directory.name}, so their keys collide")
         seen[directory.name] = directory
-        pairs.extend(dataset_files(directory, inner))
+        pairs.extend(dataset_files(directory, inner, whole))
     return pairs
 
 
@@ -365,14 +382,17 @@ def main(argv=None):
                         help="with --dataset, the folder in the bucket that holds the tree")
     layout.add_argument("--flat", action="store_true",
                         help="with --dataset, the tree sits directly under NAME/")
+    layout.add_argument("--whole", action="store_true",
+                        help="with --dataset, every file of the directory goes under NAME/ "
+                             "at its own path")
     parser.add_argument("--env", default=DEFAULT_ENV)
     a = parser.parse_args(argv)
     if sum((bool(a.files), bool(a.shard_set), bool(a.dataset))) != 1:
         parser.error("name files, one --shard-set or --dataset directories, and only one of them")
-    if a.dataset and a.inner is None and not a.flat:
-        parser.error("a dataset needs --inner NAME or --flat, to say where its curated tree goes")
-    if not a.dataset and (a.inner is not None or a.flat):
-        parser.error("--inner and --flat apply only with --dataset")
+    if a.dataset and a.inner is None and not a.flat and not a.whole:
+        parser.error("a dataset needs --inner NAME, --flat or --whole, to say what goes where")
+    if not a.dataset and (a.inner is not None or a.flat or a.whole):
+        parser.error("--inner, --flat and --whole apply only with --dataset")
     load_env(a.env)
     for want in ("S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"):
         if not os.environ.get(want):
@@ -381,7 +401,7 @@ def main(argv=None):
         if a.shard_set:
             return send_shard_set(a.bucket, a.prefix, a.shard_set)
         if a.dataset:
-            pairs = collect_datasets(a.dataset, None if a.flat else a.inner)
+            pairs = collect_datasets(a.dataset, None if a.flat else a.inner, a.whole)
             return send(a.bucket, [(keyed(a.prefix, k), p) for k, p in pairs])
         missing = [f for f in a.files if not f.is_file()]
         if missing:

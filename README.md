@@ -40,6 +40,7 @@ An upload streams its body from disk, and the signature uses the digest from a f
     python3 push.py BUCKET --shard-set DIR [--prefix P]
     python3 push.py BUCKET --dataset DIR [--dataset DIR...] --inner NAME [--prefix P]
     python3 push.py BUCKET --dataset DIR [--dataset DIR...] --flat [--prefix P]
+    python3 push.py BUCKET --dataset DIR [--dataset DIR...] --whole [--prefix P]
     python3 -m pytest tests                  # the unit suite, with no network and no credential
 
 The tools run from the source, without a build or a package install, and the unit suite needs pytest.
@@ -108,16 +109,17 @@ R2 accepts the region `auto`, but B2 rejects a signature unless it names the reg
 
 ## 7. Datasets
 
-`--dataset DIR` sends one dataset: its card `DATASET_card.md` and every file under `curated/`, where `DATASET` is the name of the directory. Other directories, such as the samples, stay on disk, and so do `.DS_Store` and `._*` files.
+`--dataset DIR` sends one dataset: its card `DATASET_card.md` and every file under `curated/`, where `DATASET` is the name of the directory. Other directories, such as the samples, stay on disk, and so do `.DS_Store` and `._*` files. `--whole` sends every directory instead, for an archive that keeps the samples, the scripts and the stats beside the curated tree.
 
-Every key starts with `DATASET/`, and the card always sits at `DATASET/DATASET_card.md`. Either `--inner NAME` or `--flat` sets where the curated tree goes, and one of the two is mandatory:
+Every key starts with `DATASET/`, and the card always sits at `DATASET/DATASET_card.md`. `--inner NAME`, `--flat` or `--whole` sets what goes where, and one of the three is mandatory:
 
 | Option | Key of one shard |
 |---|---|
 | `--inner curated` | `DATASET/curated/CONFIG/train-00000-of-00001.parquet` |
 | `--flat` | `DATASET/CONFIG/train-00000-of-00001.parquet` |
+| `--whole` | `DATASET/curated/CONFIG/train-00000-of-00001.parquet`, and every other file at its own path, such as `DATASET/samples/raw/run.jsonl` |
 
-The config directories stay in both layouts: two configs often hold shards with the same file name. With `--inner curated`, the bucket holds the same layout as the directory on disk.
+The config directories stay in every layout: two configs often hold shards with the same file name. With `--inner curated`, the bucket holds the same layout as the directory on disk.
 
 | Behavior | Reason |
 |---|---|
